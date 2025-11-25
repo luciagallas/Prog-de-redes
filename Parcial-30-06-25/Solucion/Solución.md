@@ -287,3 +287,60 @@ Para esto se utiliza un Message Oriented Middleware (MOM) como RabbitMQ, que ofr
 | `maintenance.events` | fallas, daños, mantenimientos        |
 | `analytics.events`   | recibe **todo** para análisis histórico |
 
+### Bindings (enrutamiento de mensajes)
+
+En RabbitMQ, un *binding* es simplemente la regla que conecta un **exchange** con una **cola**, indicando qué mensajes deben enviarse a cada cola.
+
+En este diseño utilizamos un exchange tipo `topic` llamado: `cargaya.events`
+
+Los bindings definen cómo se distribuyen los mensajes según su “routing key”.  
+De esta forma:
+
+- Los mensajes cuyo tipo comience con `usage.` se envían a la cola `usage.events`
+- Los mensajes que comiencen con `maintenance.` se envían a la cola `maintenance.events`
+- La cola `analytics.events` recibe **todos** los mensajes para análisis histórico
+
+#### Bindings definidos:
+``` bash
+“usage.” → usage.events
+“maintenance.” → maintenance.events
+“#” → analytics.events
+```
+
+El símbolo `*` significa “una palabra”, y `#` significa “cualquier cosa”, lo cual permite que `analytics.events` reciba todos los eventos, sin importar su tipo.
+
+---
+
+##### Ejemplos de mensajes JSON enviados por el Servidor de Supervisión
+
+Los mensajes publicados en el exchange `cargaya.events` utilizan formato JSON.  
+Este JSON representa la información del evento (inicio de carga, fin de carga, fallas, alertas).
+
+##### Evento de uso (inicio de una carga)
+
+```json
+{
+  "type": "usage.start",
+  "chargerId": "CH-07",
+  "user": "anon",
+  "startTime": 1730912000
+}
+```
+Routing key: usage.start
+→ Entra por el binding usage.*
+→ Va a la cola usage.events
+→ También va a analytics.events porque su binding es #
+
+##### Evento de mantenimiento (alerta por fallas repetidas)
+```json
+{
+  "type": "maintenance.alert",
+  "chargerId": "CH-07",
+  "reason": "fallas_repetidas",
+  "count": 3
+}
+```
+Routing key: maintenance.alert
+→ Entra por el binding maintenance.*
+→ Va a la cola maintenance.events
+→ También va a analytics.events por el binding #
