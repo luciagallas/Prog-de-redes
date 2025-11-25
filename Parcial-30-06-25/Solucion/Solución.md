@@ -64,7 +64,7 @@ A continuación se presenta la versión modernizada del código, reemplazando `T
 
 ---
 
-## ✅ Código final (C# con async/await)
+## Código final (C# con async/await)
 
 ```csharp
 using System;
