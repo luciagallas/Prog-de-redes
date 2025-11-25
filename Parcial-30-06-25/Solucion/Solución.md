@@ -216,7 +216,7 @@ service ChargerMonitoringService {
 - Envia mensajes rápidos, pequeños y eficientes.
 - Usa HTTP/2 → baja latencia.
 - Perfecto para IoT / sensores que reportan cambios constantemente.
-
+--- 
 
 # Sockets
 - Los usuarios deben ver en el mapa:
@@ -259,6 +259,7 @@ Cliente --------------------- Servidor Web
 - Necesitamos actualizaciones instantáneas, sin “refrescar” la página.
 - Permite enviar eventos 1 → N (mismo evento a todos los clientes).
 - Muy eficiente para notificaciones rápidas.
+---
 
 # MOM (Rabbit MQ) - Distribución de eventos internos
 Los eventos generados por el Servidor de Supervisión (como fallas o inicios/fin de carga) deben ser consumidos por otros módulos:
