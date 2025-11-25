@@ -261,7 +261,7 @@ Cliente --------------------- Servidor Web
 - Muy eficiente para notificaciones rápidas.
 ---
 
-# MOM (Rabbit MQ) - Distribución de eventos internos
+## MOM (Rabbit MQ) - Distribución de eventos internos
 Los eventos generados por el Servidor de Supervisión (como fallas o inicios/fin de carga) deben ser consumidos por otros módulos:
 
 - Servidor Estadístico
