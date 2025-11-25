@@ -157,3 +157,132 @@ await File.WriteAllTextAsync(...)
 - La operación de I/O no bloquea un thread.
 - El hilo vuelve al ThreadPool hasta que el sistema operativo completa la escritura.
 - Esto mejora rendimiento y escalabilidad.
+
+
+# Ejercicio 3 — Diseño del sistema “CargaYa”
+
+El sistema “CargaYa” permite a los usuarios visualizar los cargadores eléctricos públicos disponibles en su ciudad, su estado, y recibir actualizaciones en tiempo real.  
+Además, procesa eventos de uso y fallas para análisis y planificación.
+
+Para resolver este ejercicio se seleccionan **tres tecnologías** entre las permitidas:
+
+- **gRPC** → comunicación rápida entre dispositivos de campo y el Servidor de Supervisión  
+- **Sockets** → notificaciones en tiempo real hacia los usuarios  
+- **MOM (RabbitMQ)** → distribución confiable de eventos entre servidores  
+
+---
+
+# 1. gRPC — Comunicación con dispositivos de campo
+
+Los sensores instalados en cada cargador deben reportar:
+
+- Estado (operativo / en uso / fuera de servicio)  
+- Ubicación  
+- Timestamp  
+- ID del cargador  
+
+Dado que son dispositivos que reportan con frecuencia y necesitan eficiencia, se utiliza **gRPC**, que transmite mensajes binarios (Protocol Buffers), mucho más rápido que JSON/REST.
+
+## Archivo `.proto`
+
+```proto
+syntax = "proto3";
+
+package cargaya;
+
+// Mensaje enviado por los dispositivos de campo
+message ChargerStatusUpdate {
+  string chargerId = 1;
+  string status = 2;         // operativo, en_uso, fuera_servicio
+  double latitude = 3;
+  double longitude = 4;
+  int64 timestamp = 5;       // epoch time
+}
+
+// Respuesta del servidor
+message UpdateResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+// Servicio gRPC que recibe actualizaciones
+service ChargerMonitoringService {
+  rpc SendStatus (ChargerStatusUpdate) returns (UpdateResponse);
+}
+
+```
+### Justificación del uso de gRPC
+- Es ideal para comunicación entre máquinas (M2M).
+- Envia mensajes rápidos, pequeños y eficientes.
+- Usa HTTP/2 → baja latencia.
+- Perfecto para IoT / sensores que reportan cambios constantemente.
+
+
+# Sockets
+- Los usuarios deben ver en el mapa:
+    - cuando un cargador queda libre
+    - cuando entra en mantenimiento
+    - cuando falla
+    - cuando aparece uno nuevo
+
+Para eso se usa un canal tiempo real, que REST no puede ofrecer.
+La mejor opción es Sockets, porque mantienen una conexión abierta y el servidor puede enviar eventos sin que el cliente los pida.
+
+## Protocolo de comunicación (diagrama ASCII)
+``` bash
+Cliente --------------------- Servidor Web
+   |                                |
+   |---- TCP Connect -------------->|
+   |                                |
+   |<----- ACK ---------------------|
+   |
+   |---- SUBSCRIBE events --------->|
+   |
+   |<---- EVENT {tipo:"nuevo", id:"CH-22"} -------\
+   |<---- EVENT {tipo:"falla", id:"CH-10"}         |  JSON
+   |<---- EVENT {tipo:"mantenimiento", id:"CH-03"} /
+   |
+   |---- DISCONNECT ---------------->|
+```
+
+## Mensajes enviados por el servidor
+``` json
+{
+  "type": "charger_status",
+  "chargerId": "CH-10",
+  "status": "fuera_servicio",
+  "timestamp": 1730912440
+}
+```
+
+### Justificación del uso de Sockets
+- Necesitamos actualizaciones instantáneas, sin “refrescar” la página.
+- Permite enviar eventos 1 → N (mismo evento a todos los clientes).
+- Muy eficiente para notificaciones rápidas.
+
+# MOM (Rabbit MQ) - Distribución de eventos internos
+Los eventos generados por el Servidor de Supervisión (como fallas o inicios/fin de carga) deben ser consumidos por otros módulos:
+
+- Servidor Estadístico
+- Sistemas de alertas
+- Dashboards futuros
+
+Para esto se utiliza un Message Oriented Middleware (MOM) como RabbitMQ, que ofrece:
+
+✔ persistencia
+✔ reintentos
+✔ desac acoplamiento
+✔ escalabilidad (varios consumidores)
+
+### Diseño de colas y exchanges
+
+**Exchange principal:** `cargaya.events` (tipo `topic`)
+
+### Colas
+
+| Cola              | Propósito                              |
+|-------------------|------------------------------------------|
+| `usage.events`    | inicio/fin de carga                      |
+| `maintenance.events` | fallas, daños, mantenimientos        |
+| `analytics.events`   | recibe **todo** para análisis histórico |
+
